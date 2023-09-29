@@ -9,20 +9,34 @@
             if (!data) {
                 alert('Error generating link, please contact support');
             }
-            document.querySelector('.link-container').style.display = 'block';
-            document.querySelector('.link-code').innerHTML = `${location.origin}/${data.id}/${data.key}`;
+            document.querySelector('.pixel-container').style.display = 'block';
+            document.querySelector('.pixel-code').innerHTML = `Pixel URL: <a target="_blank" href="${location.origin}/${data.id}.png">${location.origin}/${data.id}.png</a><br />Reporting URL: <a target="_blank" href="${location.origin}/${data.id}.png/${data.key}">${location.origin}/${data.id}.png/${data.key}</a> (DON'T LOSE THIS URL)`;
             const imageEl = document.createElement('img');
             imageEl.src = `${location.origin}/${data}`;
             document.body.appendChild(imageEl);
+        }
+
+        async function addReporting() {
+            const imageUrl = document.querySelector('#image-url').value;
+            document.querySelector('.image-container').style.display = 'block';
+            document.querySelector('.image-code').innerHTML = `Image URL: <a target="_blank" href="${location.origin}/image.png?u=${btoa(imageUrl)}">${location.origin}/image.png?u=${btoa(imageUrl)}</a>`;
         }
     </script>
 
 </head>
 
 <body>
+    <h1>Sneaky Pixel</h1>
+    <h3>Generate 1x1 px transparent pixel</h3>
     Click <button onclick="generateLink()">here</button> to generate a unique pixel link.
-    <div class="link-container" style="display: none;">
-        <pre class="link-code"></pre>
+    <div class="pixel-container" style="display: none;">
+        <pre class="pixel-code"></pre>
+    </div>
+    
+    <h3>Add reporting on an existing image</h3>
+    <input size="40" id="image-url" placeholder="Image URL" /> <button onclick="addReporting()">Generate Tracking Image</button>
+    <div class="image-container" style="display: none;">
+        <pre class="image-code"></pre>
     </div>
 </body>
 

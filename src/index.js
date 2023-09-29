@@ -11,21 +11,14 @@ app.set('trust proxy', 1);
 async function collectData(req) {
     return new Promise((resolve) => {
         const data = {};
+        data.id = req.params.id;
         data.dateTime = new Date().getTime();
         data.ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
-        data.secChUa = req.headers['sec-ch-ua'];
-        data.secChUaMobile = req.headers['sec-ch-ua-mobile'];
-        data.secChUaPlatform = req.headers['sec-ch-ua-platform'];
-        data.acceptedLanguage = req.headers['accept-language'];
-        data.cookie = req.headers.cookie || req.cookies;
-        data.userAgent = req.headers['user-agent'];
-        data.accept = req.headers.accept;
-        data.referer = req.headers.referer;
-        data.origin = req.headers.origin;
         data.headers = req.headers;
-        data.id = req.params.id;
-
-
+        if (req.query.u) {
+            const imageUrl = Buffer.from(req.query.u, 'base64').toString('ascii');
+            data.originalImageUrl = imageUrl || null;
+        }
         resolve(data);
     });
 }
@@ -35,8 +28,9 @@ app.get('/', (req, res) => {
 });
 
 app.post('/generate', (req, res) => {
-    const id = uuid.v4().split('-')[4];
-    const key = uuid.v4().split('-')[3];
+    const splitUuid = uuid.v4().split('-');
+    const id = splitUuid[4];
+    const key = splitUuid[3] + splitUuid[2];
     res.json({id, key});
 });
 
@@ -48,16 +42,17 @@ app.get('/:id', async (req, res) => {
     try {
         const collectedData = await collectData(req);
         console.log(collectedData);
-        const { img } = req.query;
-        if (!img) { // just show a pixel
+        const { u } = req.query;
+        if (u) { // show image passed in
+            const decodedImageUrl = Buffer.from(u, 'base64').toString('ascii');
+            const response = await axios.get(decodedImageUrl, { responseType: 'arraybuffer' })
+            res.contentType(response.headers['content-type']);
+            res.end(response.data);
+        } else { // show 1x1 transparent pixel
             const base64Image = "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
             const imgBuffer = Buffer.from(base64Image, 'base64');
             res.contentType('image/gif');
             res.end(imgBuffer);
-        } else { // show image passed in
-            const response = await axios.get(img, { responseType: 'arraybuffer' })
-            res.contentType(response.headers['content-type']);
-            res.end(response.data);
         }
         
     } catch (error) {
@@ -66,4 +61,4 @@ app.get('/:id', async (req, res) => {
     }
 });
 
-app.listen(port, () => console.log(`Listening on http://localhost:${port}/test`));
+app.listen(port, () => console.log(`Listening on http://localhost:${port}/`));
