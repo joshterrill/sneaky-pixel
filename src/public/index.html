@@ -1,0 +1,29 @@
+﻿<!doctype html>
+<html>
+
+<head>
+    <script>
+        async function generateLink() {
+            const response = await fetch('/generate', { method: 'POST' });
+            const data = await response.json();
+            if (!data) {
+                alert('Error generating link, please contact support');
+            }
+            document.querySelector('.link-container').style.display = 'block';
+            document.querySelector('.link-code').innerHTML = `${location.origin}/${data.id}/${data.key}`;
+            const imageEl = document.createElement('img');
+            imageEl.src = `${location.origin}/${data}`;
+            document.body.appendChild(imageEl);
+        }
+    </script>
+
+</head>
+
+<body>
+    Click <button onclick="generateLink()">here</button> to generate a unique pixel link.
+    <div class="link-container" style="display: none;">
+        <pre class="link-code"></pre>
+    </div>
+</body>
+
+</html>
