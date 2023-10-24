@@ -14,7 +14,7 @@ app.set('trust proxy', 1);
 open({
     filename: './db/sneaky.db',
     driver: sqlite3.Database
-}).then(db => utils(db));
+}).then(db => utils.db = db);
 
 async function collectData(req) {
     return new Promise((resolve) => {
@@ -39,7 +39,7 @@ app.post('/generate', async (req, res) => {
     const splitUuid = uuid.v4().split('-');
     const id = splitUuid[4];
     const key = splitUuid[3] + splitUuid[2];
-    await utils.put({ id, key, context: 'pixel' });
+    await utils.save({ id, key, context: 'PIXEL' });
     res.json({id, key});
 });
 
