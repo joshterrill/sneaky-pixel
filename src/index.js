@@ -1,12 +1,20 @@
 const express = require('express');
 const axios = require('axios');
 const uuid = require('uuid');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
+const utils = require('./utils');
 const app = express();
 
 const port = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 app.set('trust proxy', 1);
+
+open({
+    filename: './db/sneaky.db',
+    driver: sqlite3.Database
+}).then(db => utils(db));
 
 async function collectData(req) {
     return new Promise((resolve) => {
@@ -27,15 +35,17 @@ app.get('/', (req, res) => {
     res.sendFile(`${__dirname}/public/index.html`);
 });
 
-app.post('/generate', (req, res) => {
+app.post('/generate', async (req, res) => {
     const splitUuid = uuid.v4().split('-');
     const id = splitUuid[4];
     const key = splitUuid[3] + splitUuid[2];
+    await utils.put({ id, key, context: 'pixel' });
     res.json({id, key});
 });
 
 app.get('/:id/:key', (req, res) => {
-    res.send('Showing data');
+    const data = utils.getByIdAndKey(req.params.id, req.params.key);
+    res.json({data});
 });
 
 app.get('/:id', async (req, res) => {
