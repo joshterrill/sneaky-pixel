@@ -1,8 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const uuid = require('uuid');
-const sqlite3 = require('sqlite3');
-const { open } = require('sqlite');
+
 const utils = require('./utils');
 const app = express();
 
@@ -11,10 +10,7 @@ const port = process.env.PORT || 3000;
 app.use(express.static('public'));
 app.set('trust proxy', 1);
 
-open({
-    filename: './db/sneaky.db',
-    driver: sqlite3.Database
-}).then(db => utils.db = db);
+utils.init();
 
 async function collectData(req) {
     return new Promise((resolve) => {
@@ -39,20 +35,26 @@ app.post('/generate', async (req, res) => {
     const splitUuid = uuid.v4().split('-');
     const id = splitUuid[4];
     const key = splitUuid[3] + splitUuid[2];
-    await utils.save({ id, key, context: 'PIXEL' });
     res.json({id, key});
 });
 
-app.get('/:id/:key', (req, res) => {
-    const data = utils.getByIdAndKey(req.params.id, req.params.key);
+app.get('/:id/:key', async (req, res) => {
+    const data = await utils.getByIdAndKey(req.params.id, req.params.key);
+    console.log('data', data);
     res.json({data});
 });
 
 app.get('/:id', async (req, res) => {
     try {
         const collectedData = await collectData(req);
-        console.log(collectedData);
+        console.log('collectedData', collectedData);
         const { u } = req.query;
+        await utils.save({
+            id: collectedData.id,
+            key: collectedData.key,
+            context: u ? 'image' : 'pixel',
+            ...collectedData,
+        });
         if (u) { // show image passed in
             const decodedImageUrl = Buffer.from(u, 'base64').toString('ascii');
             const response = await axios.get(decodedImageUrl, { responseType: 'arraybuffer' })
