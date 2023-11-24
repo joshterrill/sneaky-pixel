@@ -17,6 +17,7 @@ module.exports = {
         const stmt = await db.prepare('INSERT INTO data (id, key, context, dateTime, ip, headers, originalImageUrl) VALUES (?, ?, ?, ?, ?, ?, ?)');
         await stmt.run(id, key, context, dateTime, ip, headers, originalImageUrl);
         await stmt.finalize();
+        console.log('saved', id, key, context);
     },
 
     getById: async (id) => {

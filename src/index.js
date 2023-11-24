@@ -35,10 +35,15 @@ app.post('/generate', async (req, res) => {
     const splitUuid = uuid.v4().split('-');
     const id = splitUuid[4];
     const key = splitUuid[3] + splitUuid[2];
+    await utils.save({
+        id: collectedData.id,
+        key: collectedData.key,
+    });
     res.json({id, key});
 });
 
 app.get('/:id/:key', async (req, res) => {
+    console.log('using key');
     const data = await utils.getByIdAndKey(req.params.id, req.params.key);
     console.log('data', data);
     res.json({data});
@@ -46,6 +51,10 @@ app.get('/:id/:key', async (req, res) => {
 
 app.get('/:id', async (req, res) => {
     try {
+        if (req.params.id === 'favicon.ico') {
+            res.status(404).send('Not found');
+            return;
+        }
         const collectedData = await collectData(req);
         console.log('collectedData', collectedData);
         const { u } = req.query;
