@@ -14,6 +14,7 @@ module.exports = {
         });
     },
     save: async ({ id, key, context, dateTime, ip, headers, originalImageUrl }) => {
+        console.log('going to save', { id, key, context, dateTime, ip, headers, originalImageUrl });
         const stmt = await db.prepare('INSERT INTO data (id, key, context, dateTime, ip, headers, originalImageUrl) VALUES (?, ?, ?, ?, ?, ?, ?)');
         await stmt.run(id, key, context, dateTime, ip, headers, originalImageUrl);
         await stmt.finalize();
@@ -21,9 +22,11 @@ module.exports = {
     },
 
     getById: async (id) => {
-        const stmt = await db.prepare('SELECT * FROM data WHERE id = ?');
+        console.log('id', id);
+        const stmt = await db.prepare('SELECT * FROM data WHERE id = ? and key is not null');
         const row = await stmt.get(id);
         await stmt.finalize();
+        console.log('got row', row);
         return row;
     },
     getByIdAndKey: async (id, key) => {

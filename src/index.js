@@ -15,10 +15,10 @@ utils.init();
 async function collectData(req) {
     return new Promise((resolve) => {
         const data = {};
-        data.id = req.params.id;
+        data.id = req.params.id.replace('.png', '');
         data.dateTime = new Date().getTime();
         data.ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
-        data.headers = req.headers;
+        data.headers = JSON.stringify(req.headers);
         if (req.query.u) {
             const imageUrl = Buffer.from(req.query.u, 'base64').toString('ascii');
             data.originalImageUrl = imageUrl || null;
@@ -36,8 +36,8 @@ app.post('/generate', async (req, res) => {
     const id = splitUuid[4];
     const key = splitUuid[3] + splitUuid[2];
     await utils.save({
-        id: collectedData.id,
-        key: collectedData.key,
+        id,
+        key,
     });
     res.json({id, key});
 });
@@ -58,12 +58,17 @@ app.get('/:id', async (req, res) => {
         const collectedData = await collectData(req);
         console.log('collectedData', collectedData);
         const { u } = req.query;
-        await utils.save({
+        if (!collectedData.key) {
+            collectedData.key = await utils.getById(collectedData.id).key;
+        }
+        const obj = {
             id: collectedData.id,
             key: collectedData.key,
             context: u ? 'image' : 'pixel',
             ...collectedData,
-        });
+        };
+        console.log('got obj', obj);
+        await utils.save(obj);
         if (u) { // show image passed in
             const decodedImageUrl = Buffer.from(u, 'base64').toString('ascii');
             const response = await axios.get(decodedImageUrl, { responseType: 'arraybuffer' })
