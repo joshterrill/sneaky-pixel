@@ -1,8 +1,11 @@
+const dotenv = require('dotenv');
+dotenv.config();
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const crypto = require('crypto');
 const axios = require('axios');
 const cors = require('cors');
+const fs = require('fs');
 const app = express();
 const port = 3000;
 
@@ -10,7 +13,12 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.static('public'));
 
-const db = new sqlite3.Database('./db/sneaky.db');
+const dbLocation = process.env.DB_LOCATION || './db';
+if (!fs.existsSync(dbLocation)) {
+    fs.mkdirSync(dbLocation, { recursive: true });
+}
+
+const db = new sqlite3.Database(`${dbLocation}/sneaky_pixel.db`);
 
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS pixel_data (
@@ -48,7 +56,6 @@ app.get('/generate', (req, res) => {
     });
 });
 
-// Serve the image or the HTML page to collect user info
 app.get('/:filename', async (req, res) => {
     const filename = req.params.filename;
 
@@ -60,7 +67,11 @@ app.get('/:filename', async (req, res) => {
         const ip_address = req.ip;
         const headers = JSON.stringify(req.headers);
         const referer = req.headers.referer || '';
-        const isEmbedded = referer !== '';
+        let isEmbedded = false;
+        // not super sure about this logic...
+        if (referer && !referer.startsWith(`${req.protocol}://${req.hostname}`)) {
+            isEmbedded = true;
+        }
 
         let metadata = null;
         if (req.query.m) {

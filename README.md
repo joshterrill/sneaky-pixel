@@ -2,26 +2,6 @@
 
 _"A stupid simple sneaky pixel."_
 
-https://pixel.dangerous.dev
-
-A barebones simple pixel tracking API that lets you:
-
-* Generate a 1x1 px transparent tracking pixel
-* Use the API as a proxy to embed tracking capabilities in any image
-* Simple reports on how many times a pixel was loaded, along with metadata such as request headers, IP address, origin of 
-request, cookies (if on the same origin), etc.
-
-Using these features, you can:
-
-* Know when someone reads an email
-* Correlate user interactions across multiple sites/pages
-* And many other more creatrive things!
-
-Things to note:
-
-* The pixel URL that is generated looks like `https://pixel.dangerous.dev/<id>.png/<key>`. The ID being the link to the pixel, and adding the `/<key>` on the end lets you view the reporting data. Don't lose the key, you won't be able to recover it
-* Sometimes forums or other social community software will proxy image URL's through their own internal proxy. This will lead to all requests coming from the same IP, same user-agent, same everything since the proxy server is the one making the request, not the end-user/client
-
 ## Install
 
 ```bash
@@ -33,18 +13,95 @@ npm start
 
 ## Usage
 
-#### Generating a 1x1 transparent pixel:
+If you wish to use the frontend generator, simply navigate to http://localhost:3000/
 
-1. Navigate to http://localhost:3000/ and click the "Generate" button
-2. Two links will appear, one is the pixel link, the other is the reporting link
-3. The pixel link can be used anywhere a normal image on a remote server can be embedded, i.,e. via `<img />` tags for HTML, or `[img]` tags for BBCode
-4. When something loads the image, metadata is acquired on the client and stored in a database that is viewable via the reporting link
+If you wish to use the API, follow the instructions below:
 
-#### Adding tracking capabilities on another image
+**Generate a 1x1 pixel iamge**
 
-1. Go to http://localhost:3000/ and paste the image URL in the "Image URL" input, click the "Generate" button
-2. A URL will be generated that serves up the image you pasted into the input, except now it comes with a reporting URL that lets you view the tracking metadata
+```
+GET /generate
 
+Response:
+{
+    "filename": "32d21d94f45ad923b666dd7b7e380409.png",
+    "key": "f90009bc275de282d3633876ca47271c",
+    "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/4tvf8AAAAAASUVORK5CYII="
+}
+```
+
+**Generate a tracking pixel from another image**
+
+```
+GET /generate?url=<encodeURI encoded image url>
+
+Reponse:
+{
+    "filename": "de8b1042c192859d5d081acf70b603e0.png",
+    "key": "98ce85f93e38a04cb9a5d9c07e3ad7d9",
+    "url": "https://www.signwell.com/assets/vip-signatures/muhammad-ali-signature-3f9237f6fc48c3a04ba083117948e16ee7968aae521ae4ccebdfb8f22596ad22.svg"
+}
+```
+
+**View a tracking image**
+
+```
+GET /:filename
+# i.e. GET /32d21d94f45ad923b666dd7b7e380409.png
+
+Response: Stream of 1x1 pixel or other specified image
+```
+
+**Add custom metadata to image tracking**
+
+```
+GET /filename?m=<base64 encoded metadata>
+# i.e. GET /32d21d94f45ad923b666dd7b7e380409.png?m=eyJpZCI6MSwibmFtZSI6Ikpvc2gifQ==
+
+Reponse: Stream of 1x1 pixel or other specified image, metadata will be saved to tracking database
+```
+
+**View tracking results**
+
+```
+GET /:filename/:key
+# i.e. GET /32d21d94f45ad923b666dd7b7e380409.png/f90009bc275de282d3633876ca47271c
+
+Response:
+
+{
+    "views": [
+        {
+        "id": 5,
+        "filename": "b9f1e01151563abdbe666a761eb96814.png",
+        "ip_address": "::1",
+        "headers": "{\"host\":\"localhost:3000\",\"connection\":\"keep-alive\",\"sec-ch-ua\":\"\\\"Not)A;Brand\\\";v=\\\"99\\\", \\\"Google Chrome\\\";v=\\\"127\\\", \\\"Chromium\\\";v=\\\"127\\\"\",\"sec-ch-ua-mobile\":\"?0\",\"sec-ch-ua-platform\":\"\\\"macOS\\\"\",\"upgrade-insecure-requests\":\"1\",\"user-agent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36\",\"accept\":\"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\",\"sec-fetch-site\":\"same-origin\",\"sec-fetch-mode\":\"navigate\",\"sec-fetch-user\":\"?1\",\"sec-fetch-dest\":\"document\",\"referer\":\"http://localhost:3000/\",\"accept-encoding\":\"gzip, deflate, br, zstd\",\"accept-language\":\"en-US,en;q=0.9\",\"cookie\":\"_ga=GA1.1.234919413.1700547497; __stripe_mid=62e34d0b-e572-4cf6-a0e9-b1a64f28057a9a2ee6; _ga_S9E5S867CM=GS1.1.1714498452.2.0.1714498452.0.0.0; _ga_SM9F2HGDV4=GS1.1.1719441565.31.1.1719441589.0.0.0; _ga_JEYN8BENX8=GS1.1.1722465747.21.1.1722466669.0.0.0\"}",
+        "is_embedded": 1,
+        "metadata": null,
+        "fingerprint": null,
+        "timestamp": "2024-08-01 07:12:27"
+        }
+    ]
+}
+```
+
+If an image is being embedded on a site, you will receive header information such as user agent, ip, referrer, etc.
+
+If an image is being viewed straight in a browser (not embedded), the image is displayed on an HTML page that collects additional fingerprinting information about a user, this looks like:
+
+
+```
+{
+    "id": 8,
+    "filename": "b9f1e01151563abdbe666a761eb96814.png",
+    "ip_address": "::1",
+    "headers": "{\"host\":\"localhost:3000\",\"connection\":\"keep-alive\",\"cache-control\":\"max-age=0\",\"sec-ch-ua\":\"\\\"Not)A;Brand\\\";v=\\\"99\\\", \\\"Google Chrome\\\";v=\\\"127\\\", \\\"Chromium\\\";v=\\\"127\\\"\",\"sec-ch-ua-mobile\":\"?0\",\"sec-ch-ua-platform\":\"\\\"macOS\\\"\",\"upgrade-insecure-requests\":\"1\",\"user-agent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36\",\"accept\":\"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\",\"sec-fetch-site\":\"same-origin\",\"sec-fetch-mode\":\"navigate\",\"sec-fetch-user\":\"?1\",\"sec-fetch-dest\":\"document\",\"referer\":\"http://localhost:3000/\",\"accept-encoding\":\"gzip, deflate, br, zstd\",\"accept-language\":\"en-US,en;q=0.9\",\"cookie\":\"_ga=GA1.1.234919413.1700547497; __stripe_mid=62e34d0b-e572-4cf6-a0e9-b1a64f28057a9a2ee6; _ga_S9E5S867CM=GS1.1.1714498452.2.0.1714498452.0.0.0; _ga_SM9F2HGDV4=GS1.1.1719441565.31.1.1719441589.0.0.0; _ga_JEYN8BENX8=GS1.1.1722465747.21.1.1722466669.0.0.0\"}",
+    "is_embedded": 0,
+    "metadata": null,
+    "fingerprint": "{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36\",\"platform\":\"MacIntel\",\"languages\":[\"en-US\",\"en\"],\"hardwareConcurrency\":8,\"deviceMemory\":8,\"maxTouchPoints\":0,\"screenResolution\":[1792,1120],\"colorDepth\":24,\"timezone\":\"America/Los_Angeles\",\"cookieEnabled\":true,\"javaEnabled\":false,\"doNotTrack\":null}",
+    "timestamp": "2024-08-01 07:19:49"
+},
+```
 
 ## License
 MIT
