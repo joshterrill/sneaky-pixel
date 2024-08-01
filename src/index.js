@@ -1,90 +1,196 @@
 const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const crypto = require('crypto');
 const axios = require('axios');
-const uuid = require('uuid');
-
-const utils = require('./utils');
+const cors = require('cors');
 const app = express();
+const port = 3000;
 
-const port = process.env.PORT || 3000;
-
+app.use(cors({ origin: '*' }));
+app.use(express.json());
 app.use(express.static('public'));
-app.set('trust proxy', 1);
 
-utils.init();
+const db = new sqlite3.Database('./db/sneaky.db');
 
-async function collectData(req) {
-    return new Promise((resolve) => {
-        const data = {};
-        data.id = req.params.id.replace('.png', '');
-        data.dateTime = new Date().getTime();
-        data.ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
-        data.headers = JSON.stringify(req.headers);
-        if (req.query.u) {
-            const imageUrl = Buffer.from(req.query.u, 'base64').toString('ascii');
-            data.originalImageUrl = imageUrl || null;
-        }
-        resolve(data);
-    });
-}
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS pixel_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT,
+      key TEXT,
+      url TEXT
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS pixel_views (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT,
+      ip_address TEXT,
+      headers TEXT,
+      is_embedded INTEGER,
+      metadata TEXT,
+      fingerprint TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+});
 
 app.get('/', (req, res) => {
     res.sendFile(`${__dirname}/public/index.html`);
 });
 
-app.post('/generate', async (req, res) => {
-    const splitUuid = uuid.v4().split('-');
-    const id = splitUuid[4];
-    const key = splitUuid[3] + splitUuid[2];
-    await utils.save({
-        id,
-        key,
+app.get('/generate', (req, res) => {
+    const filename = `${crypto.randomBytes(16).toString('hex')}.png`;
+    const key = crypto.randomBytes(16).toString('hex');
+    const url = req.query.url || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/4tvf8AAAAAASUVORK5CYII=';
+
+    db.run(`INSERT INTO pixel_data (filename, key, url) VALUES (?, ?, ?)`, [filename, key, url], function (err) {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to generate pixel data' });
+        }
+        res.json({ filename, key, url });
     });
-    res.json({id, key});
 });
 
-app.get('/:id/:key', async (req, res) => {
-    console.log('using key');
-    const data = await utils.getByIdAndKey(req.params.id, req.params.key);
-    console.log('data', data);
-    res.json({data});
+// Serve the image or the HTML page to collect user info
+app.get('/:filename', async (req, res) => {
+    const filename = req.params.filename;
+
+    db.get(`SELECT * FROM pixel_data WHERE filename = ?`, [filename], async (err, row) => {
+        if (err || !row) {
+            return res.status(404).send('Not Found');
+        }
+
+        const ip_address = req.ip;
+        const headers = JSON.stringify(req.headers);
+        const referer = req.headers.referer || '';
+        const isEmbedded = referer !== '';
+
+        let metadata = null;
+        if (req.query.m) {
+            try {
+                metadata = Buffer.from(req.query.m, 'base64').toString('utf-8');
+            } catch (decodeError) {
+                return res.status(400).send('Invalid metadata encoding');
+            }
+        }
+
+        if (isEmbedded) {
+            if (row.url.startsWith('data:image')) {
+                const base64Data = row.url.split(',')[1];
+                const imgBuffer = Buffer.from(base64Data, 'base64');
+                res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': imgBuffer.length });
+                res.end(imgBuffer);
+            } else {
+                try {
+                    const imageResponse = await axios.get(row.url, { responseType: 'arraybuffer' });
+                    const contentType = imageResponse.headers['content-type'];
+                    res.writeHead(200, { 'Content-Type': contentType });
+                    res.end(imageResponse.data, 'binary');
+                } catch (fetchError) {
+                    if (!res.headersSent) {
+                        res.status(500).send('Failed to fetch external image');
+                    } else {
+                        console.error('Error after headers sent:', fetchError);
+                    }
+                }
+            }
+
+            db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, metadata) VALUES (?, ?, ?, ?, ?)`,
+                [filename, ip_address, headers, 1, metadata], function (logErr) {
+                    if (logErr) {
+                        console.error('Failed to log view:', logErr);
+                    }
+                });
+
+        } else {
+            const htmlContent = `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Image Viewer</title>
+              <style>
+                  body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                  img { max-width: 100%; max-height: 100%; }
+              </style>
+          </head>
+          <body>
+              <img src="${row.url}" alt="Tracked Image">
+              <script>
+                  function getFingerprint() {
+                      return {
+                          userAgent: navigator.userAgent,
+                          platform: navigator.platform,
+                          languages: navigator.languages,
+                          hardwareConcurrency: navigator.hardwareConcurrency,
+                          deviceMemory: navigator.deviceMemory,
+                          maxTouchPoints: navigator.maxTouchPoints,
+                          screenResolution: [window.screen.width, window.screen.height],
+                          colorDepth: window.screen.colorDepth,
+                          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                          cookieEnabled: navigator.cookieEnabled,
+                          javaEnabled: navigator.javaEnabled(),
+                          doNotTrack: navigator.doNotTrack
+                      };
+                  }
+
+                  fetch('/fingerprint', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          filename: '${filename}',
+                          ip_address: '${ip_address}',
+                          headers: ${JSON.stringify(headers)},
+                          fingerprint: getFingerprint()
+                      })
+                  });
+              </script>
+          </body>
+          </html>
+        `;
+            res.send(htmlContent);
+        }
+    });
 });
 
-app.get('/:id', async (req, res) => {
-    try {
-        if (req.params.id === 'favicon.ico') {
-            res.status(404).send('Not found');
-            return;
-        }
-        const collectedData = await collectData(req);
-        console.log('collectedData', collectedData);
-        const { u } = req.query;
-        if (!collectedData.key) {
-            collectedData.key = await utils.getById(collectedData.id).key;
-        }
-        const obj = {
-            id: collectedData.id,
-            key: collectedData.key,
-            context: u ? 'image' : 'pixel',
-            ...collectedData,
-        };
-        console.log('got obj', obj);
-        await utils.save(obj);
-        if (u) { // show image passed in
-            const decodedImageUrl = Buffer.from(u, 'base64').toString('ascii');
-            const response = await axios.get(decodedImageUrl, { responseType: 'arraybuffer' })
-            res.contentType(response.headers['content-type']);
-            res.end(response.data);
-        } else { // show 1x1 transparent pixel
-            const base64Image = "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
-            const imgBuffer = Buffer.from(base64Image, 'base64');
-            res.contentType('image/gif');
-            res.end(imgBuffer);
-        }
-        
-    } catch (error) {
-        console.log(error);
-        res.send(error);
+app.post('/fingerprint', (req, res) => {
+    const { filename, ip_address, headers, fingerprint } = req.body;
+
+    if (!filename || !fingerprint) {
+        return res.status(400).send('Invalid data');
     }
+
+    const fingerprintData = JSON.stringify(fingerprint);
+
+    db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, fingerprint) VALUES (?, ?, ?, ?, ?)`,
+        [filename, ip_address, headers, 0, fingerprintData], function (err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to save fingerprint data' });
+            }
+            res.status(200).send('Fingerprint data saved');
+        });
 });
 
-app.listen(port, () => console.log(`Listening on http://localhost:${port}/`));
+app.get('/:filename/:key', (req, res) => {
+    const { filename, key } = req.params;
+
+    if (!key) {
+        return res.status(400).send('Key is required');
+    }
+
+    db.get(`SELECT * FROM pixel_data WHERE filename = ? AND key = ?`, [filename, key], (err, row) => {
+        if (err || !row) {
+            return res.status(404).send('Not Found');
+        }
+
+        db.all(`SELECT * FROM pixel_views WHERE filename = ?`, [filename], (err, views) => {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to retrieve views' });
+            }
+            res.json({ views });
+        });
+    });
+});
+
+app.listen(port, () => {
+    console.log(`Sneaky Pixel app listening at http://localhost:${port}`);
+});
+

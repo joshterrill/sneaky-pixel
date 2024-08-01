@@ -1,43 +1,49 @@
-﻿<!doctype html>
-<html>
-
+﻿<!DOCTYPE html>
+<html lang="en">
 <head>
-    <script>
-        async function generateLink() {
-            const response = await fetch('/generate', { method: 'POST' });
-            const data = await response.json();
-            if (!data) {
-                alert('Error generating link, please contact support');
-            }
-            document.querySelector('.pixel-container').style.display = 'block';
-            document.querySelector('.pixel-code').innerHTML = `Pixel URL: <a target="_blank" href="${location.origin}/${data.id}.png">${location.origin}/${data.id}.png</a><br />Reporting URL: <a target="_blank" href="${location.origin}/${data.id}.png/${data.key}">${location.origin}/${data.id}.png/${data.key}</a> (DON'T LOSE THIS URL)`;
-            const imageEl = document.createElement('img');
-            imageEl.src = `${location.origin}/${data}`;
-            document.body.appendChild(imageEl);
-        }
-
-        async function addReporting() {
-            const imageUrl = document.querySelector('#image-url').value;
-            document.querySelector('.image-container').style.display = 'block';
-            document.querySelector('.image-code').innerHTML = `Image URL: <a target="_blank" href="${location.origin}/image.png?u=${btoa(imageUrl)}">${location.origin}/image.png?u=${btoa(imageUrl)}</a>`;
-        }
-    </script>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sneaky Pixel Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 600px; margin: auto; text-align: center; }
+        input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        .result { margin-top: 20px; }
+        a { display: block; margin: 10px 0; word-break: break-all; }
+    </style>
 </head>
-
 <body>
-    <h1>Sneaky Pixel</h1>
-    <h3>Generate 1x1 px transparent pixel</h3>
-    Click <button onclick="generateLink()">here</button> to generate a unique pixel link.
-    <div class="pixel-container" style="display: none;">
-        <pre class="pixel-code"></pre>
+    <div class="container">
+        <h1>Sneaky Pixel Generator</h1>
+        <p>Enter an optional URL to embed in the image:</p>
+        <input type="text" id="urlInput" placeholder="Enter a URL (optional)">
+        <button id="generateButton">Generate Link</button>
+        <div class="result" id="result"></div>
     </div>
-    
-    <h3>Add reporting on an existing image</h3>
-    <input size="40" id="image-url" placeholder="Image URL" /> <button onclick="addReporting()">Generate Tracking Image</button>
-    <div class="image-container" style="display: none;">
-        <pre class="image-code"></pre>
-    </div>
-</body>
 
+    <script>
+        document.getElementById('generateButton').addEventListener('click', () => {
+            const urlInput = document.getElementById('urlInput').value;
+            const generateUrl = urlInput ? `/generate?url=${encodeURIComponent(urlInput)}` : '/generate';
+
+            fetch(generateUrl)
+                .then(response => response.json())
+                .then(data => {
+                    const filename = data.filename;
+
+                    const imageUrl = `${location.origin}/${filename}`;
+                    const keyUrl = `${location.origin}/${filename}/${data.key}`;
+
+                    document.getElementById('result').innerHTML = `
+                        <p>Generated Image Link:</p>
+                        <a href="${imageUrl}" target="_blank">${imageUrl}</a>
+                        <p>Access Key Link:</p>
+                        <a href="${keyUrl}" target="_blank">${keyUrl}</a>
+                    `;
+                })
+                .catch(error => console.error('Error generating link:', error));
+        });
+    </script>
+</body>
 </html>
