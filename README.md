@@ -33,7 +33,7 @@ Response:
 **Generate a tracking pixel from another image**
 
 ```
-GET /generate?url=<encodeURI encoded image url>
+GET /generate?url=<encodeURI() encoded image url>
 
 Reponse:
 {
@@ -90,7 +90,7 @@ If an image is being embedded on a site, you will receive header information suc
 If an image is being viewed straight in a browser (not embedded), the image is displayed on an HTML page that collects additional fingerprinting information about a user, this looks like:
 
 
-```
+```json
 {
     "id": 8,
     "filename": "b9f1e01151563abdbe666a761eb96814.png",
@@ -98,9 +98,33 @@ If an image is being viewed straight in a browser (not embedded), the image is d
     "headers": "{\"host\":\"localhost:3000\",\"connection\":\"keep-alive\",\"cache-control\":\"max-age=0\",\"sec-ch-ua\":\"\\\"Not)A;Brand\\\";v=\\\"99\\\", \\\"Google Chrome\\\";v=\\\"127\\\", \\\"Chromium\\\";v=\\\"127\\\"\",\"sec-ch-ua-mobile\":\"?0\",\"sec-ch-ua-platform\":\"\\\"macOS\\\"\",\"upgrade-insecure-requests\":\"1\",\"user-agent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36\",\"accept\":\"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\",\"sec-fetch-site\":\"same-origin\",\"sec-fetch-mode\":\"navigate\",\"sec-fetch-user\":\"?1\",\"sec-fetch-dest\":\"document\",\"referer\":\"http://localhost:3000/\",\"accept-encoding\":\"gzip, deflate, br, zstd\",\"accept-language\":\"en-US,en;q=0.9\",\"cookie\":\"_ga=GA1.1.234919413.1700547497; __stripe_mid=62e34d0b-e572-4cf6-a0e9-b1a64f28057a9a2ee6; _ga_S9E5S867CM=GS1.1.1714498452.2.0.1714498452.0.0.0; _ga_SM9F2HGDV4=GS1.1.1719441565.31.1.1719441589.0.0.0; _ga_JEYN8BENX8=GS1.1.1722465747.21.1.1722466669.0.0.0\"}",
     "is_embedded": 0,
     "metadata": null,
-    "fingerprint": "{\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36\",\"platform\":\"MacIntel\",\"languages\":[\"en-US\",\"en\"],\"hardwareConcurrency\":8,\"deviceMemory\":8,\"maxTouchPoints\":0,\"screenResolution\":[1792,1120],\"colorDepth\":24,\"timezone\":\"America/Los_Angeles\",\"cookieEnabled\":true,\"javaEnabled\":false,\"doNotTrack\":null}",
-    "timestamp": "2024-08-01 07:19:49"
+    "fingerprint": <fingerprint data below>
 },
+
+// fingerprint properties:
+{
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    languages: navigator.languages || [navigator.language],
+    screenResolution: screen.width + 'x' + screen.height,
+    colorDepth: screen.colorDepth,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    cookieEnabled: navigator.cookieEnabled,
+    javaEnabled: navigator.javaEnabled(),
+    plugins: Array.from(navigator.plugins).map(plugin => plugin.name),
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    deviceMemory: navigator.deviceMemory || 'unknown',
+    touchPoints: navigator.maxTouchPoints,
+    referrer: document.referrer,
+    browserSize: window.innerWidth + 'x' + window.innerHeight,
+    localStorage: !!window.localStorage,
+    sessionStorage: !!window.sessionStorage,
+    indexedDB: !!window.indexedDB,
+    doNotTrack: navigator.doNotTrack,
+    mediaDevices: getMediaDevices(),
+    canvasFingerprint: getCanvasFingerprint(),
+    webGLFingerprint: getWebGLFingerprint()
+}
 ```
 
 ## License

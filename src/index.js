@@ -48,7 +48,7 @@ app.get('/generate', (req, res) => {
     const key = crypto.randomBytes(16).toString('hex');
     const url = req.query.url || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/4tvf8AAAAAASUVORK5CYII=';
 
-    db.run(`INSERT INTO pixel_data (filename, key, url) VALUES (?, ?, ?)`, [filename, key, url], function (err) {
+    db.run(`INSERT INTO pixel_data (filename, key, url) VALUES (?, ?, ?)`, [filename, key, url], (err) => {
         if (err) {
             return res.status(500).json({ error: 'Failed to generate pixel data' });
         }
@@ -56,20 +56,23 @@ app.get('/generate', (req, res) => {
     });
 });
 
-app.get('/:filename', async (req, res) => {
+app.get('/:filename', (req, res) => {
+    res.setHeader('Content-Disposition', 'inline');
+    res.contentType('image/png');
     const filename = req.params.filename;
+
+    const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const headers = JSON.stringify(req.headers);
+    const referer = req.headers.referer || '';
+    console.log(referer, req.hostname)
 
     db.get(`SELECT * FROM pixel_data WHERE filename = ?`, [filename], async (err, row) => {
         if (err || !row) {
             return res.status(404).send('Not Found');
         }
 
-        const ip_address = req.ip;
-        const headers = JSON.stringify(req.headers);
-        const referer = req.headers.referer || '';
         let isEmbedded = false;
-        // not super sure about this logic...
-        if (referer && !referer.startsWith(`${req.protocol}://${req.hostname}`)) {
+        if (referer.includes(req.hostname)) {
             isEmbedded = true;
         }
 
@@ -83,87 +86,156 @@ app.get('/:filename', async (req, res) => {
         }
 
         if (isEmbedded) {
-            if (row.url.startsWith('data:image')) {
-                const base64Data = row.url.split(',')[1];
-                const imgBuffer = Buffer.from(base64Data, 'base64');
-                res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': imgBuffer.length });
-                res.end(imgBuffer);
-            } else {
-                try {
-                    const imageResponse = await axios.get(row.url, { responseType: 'arraybuffer' });
-                    const contentType = imageResponse.headers['content-type'];
-                    res.writeHead(200, { 'Content-Type': contentType });
-                    res.end(imageResponse.data, 'binary');
-                } catch (fetchError) {
-                    if (!res.headersSent) {
-                        res.status(500).send('Failed to fetch external image');
-                    } else {
-                        console.error('Error after headers sent:', fetchError);
-                    }
-                }
-            }
-
             db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, metadata) VALUES (?, ?, ?, ?, ?)`,
-                [filename, ip_address, headers, 1, metadata], function (logErr) {
+                [filename, ipAddress, headers, 1, metadata], async (logErr) => {
                     if (logErr) {
                         console.error('Failed to log view:', logErr);
                     }
-                });
+                    if (row.url.includes('http')) {
+                        try {
+                            const response = await axios.get(row.url, { responseType: 'arraybuffer' });
+                            res.send(response.data);
+                        } catch (error) {
+                            console.error('Failed to fetch image:', error);
+                            res.status(500).send('Failed to fetch image');
+                        }
+                    } else {
+                        res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/4tvf8AAAAAASUVORK5CYII=', 'base64'));
 
+                    }
+                });
         } else {
             const htmlContent = `
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Image Viewer</title>
-              <style>
-                  body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                  img { max-width: 100%; max-height: 100%; }
-              </style>
-          </head>
-          <body>
-              <img src="${row.url}" alt="Tracked Image">
-              <script>
-                  function getFingerprint() {
-                      return {
-                          userAgent: navigator.userAgent,
-                          platform: navigator.platform,
-                          languages: navigator.languages,
-                          hardwareConcurrency: navigator.hardwareConcurrency,
-                          deviceMemory: navigator.deviceMemory,
-                          maxTouchPoints: navigator.maxTouchPoints,
-                          screenResolution: [window.screen.width, window.screen.height],
-                          colorDepth: window.screen.colorDepth,
-                          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                          cookieEnabled: navigator.cookieEnabled,
-                          javaEnabled: navigator.javaEnabled(),
-                          doNotTrack: navigator.doNotTrack
-                      };
-                  }
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Image Viewer</title>
+                    <style>
+                        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                        img { max-width: 100%; max-height: 100%; }
+                    </style>
+                        <style>
+        /* Default light mode styles */
+        body {
+            background-color: #ffffff;
+            color: #000000;
+        }
 
-                  fetch('/fingerprint', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                          filename: '${filename}',
-                          ip_address: '${ip_address}',
-                          headers: ${JSON.stringify(headers)},
-                          fingerprint: getFingerprint()
-                      })
-                  });
-              </script>
-          </body>
-          </html>
-        `;
+        /* Dark mode styles */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #121212;
+                color: #ffffff;
+            }
+        }
+    </style>
+                </head>
+                <body>
+                    <img src="${row.url}" alt="Tracked Image">
+                    <script>
+                        function getFingerprint() {
+    const fingerprint = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        languages: navigator.languages || [navigator.language],
+        screenResolution: screen.width + 'x' + screen.height,
+        colorDepth: screen.colorDepth,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        cookieEnabled: navigator.cookieEnabled,
+        javaEnabled: navigator.javaEnabled(),
+        plugins: Array.from(navigator.plugins).map(plugin => plugin.name),
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        deviceMemory: navigator.deviceMemory || 'unknown',
+        touchPoints: navigator.maxTouchPoints,
+        referrer: document.referrer,
+        browserSize: window.innerWidth + 'x' + window.innerHeight,
+        localStorage: !!window.localStorage,
+        sessionStorage: !!window.sessionStorage,
+        indexedDB: !!window.indexedDB,
+        doNotTrack: navigator.doNotTrack,
+        mediaDevices: getMediaDevices(),
+        canvasFingerprint: getCanvasFingerprint(),
+        webGLFingerprint: getWebGLFingerprint()
+    };
+
+    return fingerprint;
+}
+
+function getMediaDevices() {
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        return navigator.mediaDevices.enumerateDevices()
+            .then(devices => devices.map(device => ({
+                kind: device.kind,
+                label: device.label
+            })))
+            .catch(() => []);
+    }
+    return [];
+}
+
+function getCanvasFingerprint() {
+    try {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        context.textBaseline = 'top';
+        context.font = '16px Arial';
+        context.textBaseline = 'alphabetic';
+        context.fillStyle = '#f60';
+        context.fillRect(125, 1, 62, 20);
+        context.fillStyle = '#069';
+        context.fillText('Fingerprint', 2, 15);
+        context.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        context.fillText('Fingerprint', 4, 17);
+        return canvas.toDataURL();
+    } catch (e) {
+        return 'Not supported';
+    }
+}
+
+function getWebGLFingerprint() {
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (!gl) {
+            return 'Not supported';
+        }
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+        return 'Vendor: ' + vendor + ', Renderer: ' + renderer;
+    } catch (e) {
+        return 'Not supported';
+    }
+}
+
+const fingerprint = getFingerprint();
+
+                        fetch('/fingerprint', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                filename: '${filename}',
+                                ipAddress: '${ipAddress}',
+                                headers: ${JSON.stringify(headers)},
+                                fingerprint: getFingerprint(),
+                                metadata: '${metadata}'
+                            })
+                        });
+                    </script>
+                </body>
+                </html>
+            `;
             res.send(htmlContent);
         }
     });
+
 });
 
+
 app.post('/fingerprint', (req, res) => {
-    const { filename, ip_address, headers, fingerprint } = req.body;
+    const { filename, ipAddress, headers, fingerprint, metadata } = req.body;
 
     if (!filename || !fingerprint) {
         return res.status(400).send('Invalid data');
@@ -171,8 +243,8 @@ app.post('/fingerprint', (req, res) => {
 
     const fingerprintData = JSON.stringify(fingerprint);
 
-    db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, fingerprint) VALUES (?, ?, ?, ?, ?)`,
-        [filename, ip_address, headers, 0, fingerprintData], function (err) {
+    db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, fingerprint, metadata) VALUES (?, ?, ?, ?, ?)`,
+        [filename, ipAddress, headers, 0, fingerprintData, metadata], (err) => {
             if (err) {
                 return res.status(500).json({ error: 'Failed to save fingerprint data' });
             }

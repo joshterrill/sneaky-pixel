@@ -9,18 +9,24 @@
         .container { max-width: 600px; margin: auto; text-align: center; }
         input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; }
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        a { word-break: break-word; }
         .result { margin-top: 20px; }
-        a { display: block; margin: 10px 0; word-break: break-all; }
+        footer { margin: auto; width: fit-content; position: absolute; bottom: 0; right: 20px;}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Sneaky Pixel Generator</h1>
         <p>Enter an optional URL to embed in the image:</p>
+        <p><small>*SVG's currently not supported*</small></p>
         <input type="text" id="urlInput" placeholder="Enter a URL (optional)">
         <button id="generateButton">Generate Link</button>
         <div class="result" id="result"></div>
     </div>
+
+    <footer>
+        <p>Made with <span class="heart">❤️</span> by <a href="https://joshterrill.com" target="_blank">Josh Terrill</a></p>
+    </footer>
 
     <script>
         document.getElementById('generateButton').addEventListener('click', () => {
