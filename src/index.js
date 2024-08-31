@@ -57,14 +57,11 @@ app.get('/generate', (req, res) => {
 });
 
 app.get('/:filename', (req, res) => {
-    res.setHeader('Content-Disposition', 'inline');
-    res.contentType('image/png');
     const filename = req.params.filename;
 
     const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     const headers = JSON.stringify(req.headers);
     const referer = req.headers.referer || '';
-    console.log(referer, req.hostname)
 
     db.get(`SELECT * FROM pixel_data WHERE filename = ?`, [filename], async (err, row) => {
         if (err || !row) {
@@ -86,6 +83,8 @@ app.get('/:filename', (req, res) => {
         }
 
         if (isEmbedded) {
+            res.setHeader('Content-Disposition', 'inline');
+            res.contentType('image/png');
             db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, metadata) VALUES (?, ?, ?, ?, ?)`,
                 [filename, ipAddress, headers, 1, metadata], async (logErr) => {
                     if (logErr) {
@@ -101,7 +100,6 @@ app.get('/:filename', (req, res) => {
                         }
                     } else {
                         res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/4tvf8AAAAAASUVORK5CYII=', 'base64'));
-
                     }
                 });
         } else {
@@ -243,7 +241,7 @@ app.post('/fingerprint', (req, res) => {
 
     const fingerprintData = JSON.stringify(fingerprint);
 
-    db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, fingerprint, metadata) VALUES (?, ?, ?, ?, ?)`,
+    db.run(`INSERT INTO pixel_views (filename, ip_address, headers, is_embedded, fingerprint, metadata) VALUES (?, ?, ?, ?, ?, ?)`,
         [filename, ipAddress, headers, 0, fingerprintData, metadata], (err) => {
             if (err) {
                 return res.status(500).json({ error: 'Failed to save fingerprint data' });
