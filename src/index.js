@@ -68,9 +68,9 @@ app.get('/:filename', (req, res) => {
             return res.status(404).send('Not Found');
         }
 
-        let isEmbedded = false;
+        let isEmbedded = true;
         if (referer.includes(req.hostname)) {
-            isEmbedded = true;
+            isEmbedded = false;
         }
 
         let metadata = null;
@@ -133,7 +133,11 @@ app.get('/:filename', (req, res) => {
                 <body>
                     <img src="${row.url}" alt="Tracked Image">
                     <script>
-                        function getFingerprint() {
+                        async function getFingerprint() {
+                        const webRTCData = await getWebRTCData();
+                        const mediaDevices = await getMediaDevices();
+                        const batteryInfo = await getBatteryInfo();
+
     const fingerprint = {
         userAgent: navigator.userAgent,
         platform: navigator.platform,
@@ -145,7 +149,7 @@ app.get('/:filename', (req, res) => {
         javaEnabled: navigator.javaEnabled(),
         plugins: Array.from(navigator.plugins).map(plugin => plugin.name),
         hardwareConcurrency: navigator.hardwareConcurrency,
-        deviceMemory: navigator.deviceMemory || 'unknown',
+        deviceMemory: navigator.deviceMemory || 'Unknown',
         touchPoints: navigator.maxTouchPoints,
         referrer: document.referrer,
         browserSize: window.innerWidth + 'x' + window.innerHeight,
@@ -153,24 +157,61 @@ app.get('/:filename', (req, res) => {
         sessionStorage: !!window.sessionStorage,
         indexedDB: !!window.indexedDB,
         doNotTrack: navigator.doNotTrack,
-        mediaDevices: getMediaDevices(),
+        connectionEffectiveType: navigator.connection ? navigator.connection.effectiveType : 'Unknown',
+        product: navigator.product,
+        productSub: navigator.productSub,
+        mediaDevices,
         canvasFingerprint: getCanvasFingerprint(),
-        webGLFingerprint: getWebGLFingerprint()
+        webGLFingerprint: getWebGLFingerprint(),
+        webRTCData,
+        batteryInfo,
+
+
     };
 
     return fingerprint;
 }
 
-function getMediaDevices() {
+async function getMediaDevices() {
+return new Promise(async (resolve) => {
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        return navigator.mediaDevices.enumerateDevices()
-            .then(devices => devices.map(device => ({
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (devices) {
+            const mappedDevices = devices.map(device => ({
                 kind: device.kind,
                 label: device.label
-            })))
-            .catch(() => []);
+            }));
+            resolve(mappedDevices);
+        } else {
+            resolve([]); 
+        }
     }
-    return [];
+    resolve([]);
+});
+
+}
+
+function getBatteryInfo() {
+    return new Promise(async (resolve) => {
+        if (navigator.getBattery) {
+        try {
+                    const battery = await navigator.getBattery();
+            resolve({
+                charging: battery.charging,
+                chargingTime: battery.chargingTime,
+                dischargingTime: battery.dischargingTime,
+                level: battery.level,
+            });
+        } catch (e) {
+            resolve('Not supported');
+        }
+
+
+            
+        }
+        resolve('Not supported');
+    });
+
 }
 
 function getCanvasFingerprint() {
@@ -208,7 +249,33 @@ function getWebGLFingerprint() {
     }
 }
 
-const fingerprint = getFingerprint();
+async function getWebRTCData() {
+    return new Promise((resolve) => {
+            try {
+            const rtcPeerConnection = new RTCPeerConnection();
+            rtcPeerConnection.createDataChannel('');
+            rtcPeerConnection.createOffer().then(offer => rtcPeerConnection.setLocalDescription(offer));
+            rtcPeerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    resolve({
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
+                    });
+                } else {
+                    resolve('No candidate'); 
+                }
+            };
+        } catch (e) {
+            resolve('Not supported');
+        }
+    });
+
+}
+
+(async () => {
+    const fingerprint = await getFingerprint();
+console.log(fingerprint);
 
                         fetch('/fingerprint', {
                             method: 'POST',
@@ -217,10 +284,14 @@ const fingerprint = getFingerprint();
                                 filename: '${filename}',
                                 ipAddress: '${ipAddress}',
                                 headers: ${JSON.stringify(headers)},
-                                fingerprint: getFingerprint(),
+                                fingerprint,
                                 metadata: '${metadata}'
                             })
                         });
+    })();
+
+
+
                     </script>
                 </body>
                 </html>
